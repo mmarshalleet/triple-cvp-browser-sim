@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Triple CVP Conveyor Controls Simulator</title>
+    <title>Triple CVP Packout Project</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div>
-        <h1>Triple CVP Conveyor Controls Simulator</h1>
-        <p>Browser-based PLC/HMI example with real scan logic, product flow, station cycles, and faults.</p>
+        <h1>Conveyor Controls</h1>
+        <p>PLC/HMI scan logic, product flow, station cycles, and faults.</p>
       </div>
       <div class="status-pill" id="systemStatus">STOPPED</div>
     </header>
@@ -33,25 +33,25 @@
 
         <div class="fault-panel">
           <h3>Fault Injection</h3>
-          <label><input type="checkbox" id="jamStation1" /> Jam Station 1 PE</label>
-          <label><input type="checkbox" id="jamStation2" /> Jam Station 2 PE</label>
-          <label><input type="checkbox" id="jamStation3" /> Jam Station 3 PE</label>
-          <label><input type="checkbox" id="vacFail1" /> Vacuum Fail Station 1</label>
-          <label><input type="checkbox" id="vacFail2" /> Vacuum Fail Station 2</label>
-          <label><input type="checkbox" id="vacFail3" /> Vacuum Fail Station 3</label>
+          <label><input type="checkbox" id="jamStation1" /> Station 1 PE</label>
+          <label><input type="checkbox" id="jamStation2" /> Station 2 PE</label>
+          <label><input type="checkbox" id="jamStation3" /> Station 3 PE</label>
+          <label><input type="checkbox" id="vacFail1" /> Station 1 Fault</label>
+          <label><input type="checkbox" id="vacFail2" /> Station 2 Fault</label>
+          <label><input type="checkbox" id="vacFail3" /> Station 3 Fault</label>
         </div>
       </section>
 
       <section class="panel sim-panel">
         <div class="panel-title-row">
-          <h2>Machine Simulation</h2>
+          <h2>CVP Machines</h2>
           <span>Infeed → CVP 1 → CVP 2 → CVP 3 → Outfeed</span>
         </div>
         <canvas id="machineCanvas" width="1100" height="360"></canvas>
       </section>
 
       <section class="panel io-panel">
-        <h2>Live I/O</h2>
+        <h2>I/O</h2>
         <div class="io-columns">
           <div>
             <h3>Inputs</h3>
@@ -69,7 +69,7 @@
       </section>
 
       <section class="panel logic-panel">
-        <h2>PLC-Style Logic Monitor</h2>
+        <h2>PLC Logic Monitor</h2>
         <div id="logicList" class="logic-list"></div>
       </section>
 
