@@ -5,240 +5,81 @@ const canvas = document.getElementById('machineCanvas');
 const ctx = canvas.getContext('2d');
 
 const el = {
-  startBtn: document.getElementById('startBtn'),
-  stopBtn: document.getElementById('stopBtn'),
-  resetBtn: document.getElementById('resetBtn'),
-  spawnBtn: document.getElementById('spawnBtn'),
-  autoBtn: document.getElementById('autoBtn'),
-  estopBtn: document.getElementById('estopBtn'),
-  inputList: document.getElementById('inputList'),
-  outputList: document.getElementById('outputList'),
-  stationList: document.getElementById('stationList'),
-  logicList: document.getElementById('logicList'),
-  alarmList: document.getElementById('alarmList'),
-  systemStatus: document.getElementById('systemStatus'),
-  scanTime: document.getElementById('scanTime'),
-  jamStation1: document.getElementById('jamStation1'),
-  jamStation2: document.getElementById('jamStation2'),
-  jamStation3: document.getElementById('jamStation3'),
-  vacFail1: document.getElementById('vacFail1'),
-  vacFail2: document.getElementById('vacFail2'),
-  vacFail3: document.getElementById('vacFail3')
+  startBtn: document.getElementById('startBtn'), stopBtn: document.getElementById('stopBtn'),
+  resetBtn: document.getElementById('resetBtn'), spawnBtn: document.getElementById('spawnBtn'),
+  autoBtn: document.getElementById('autoBtn'), estopBtn: document.getElementById('estopBtn'),
+  statusPill: document.getElementById('statusPill'), scanInfo: document.getElementById('scanInfo'),
+  ioGrid: document.getElementById('ioGrid'), rungs: document.getElementById('rungs'), alarms: document.getElementById('alarms'),
+  jam: [document.getElementById('jam1'), document.getElementById('jam2'), document.getElementById('jam3')],
+  vac: [document.getElementById('vac1'), document.getElementById('vac2'), document.getElementById('vac3')]
 };
 
-el.startBtn.addEventListener('click', () => { state.startPB = true; });
-el.stopBtn.addEventListener('click', () => { state.stopPB = true; });
-el.resetBtn.addEventListener('click', () => { state.resetPB = true; });
-el.spawnBtn.addEventListener('click', () => spawnProduct(state));
-el.autoBtn.addEventListener('click', () => {
-  state.autoMode = !state.autoMode;
-  if (!state.autoMode) state.masterRunLatch = false;
-});
-el.estopBtn.addEventListener('click', () => {
-  state.estopOK = !state.estopOK;
-  if (!state.estopOK) state.masterRunLatch = false;
-});
+el.startBtn.onclick = () => { state.startPB = true; };
+el.stopBtn.onclick = () => { state.stopPB = true; };
+el.resetBtn.onclick = () => { state.resetPB = true; };
+el.spawnBtn.onclick = () => spawnProduct(state);
+el.autoBtn.onclick = () => { state.autoMode = !state.autoMode; el.autoBtn.textContent = `AUTO MODE: ${state.autoMode ? 'ON' : 'OFF'}`; };
+el.estopBtn.onclick = () => { state.estopOK = !state.estopOK; el.estopBtn.textContent = state.estopOK ? 'E-STOP OK' : 'E-STOP OPEN'; el.estopBtn.className = state.estopOK ? 'safe' : 'stop'; };
 
-for (const key of Object.keys(state.forcedFaults)) {
-  el[key].addEventListener('change', event => {
-    state.forcedFaults[key] = event.target.checked;
-  });
+function syncFaults() {
+  el.jam.forEach((box, i) => state.faultInject.jam[i] = box.checked);
+  el.vac.forEach((box, i) => state.faultInject.vacuumFail[i] = box.checked);
 }
 
-function drawConveyor() {
+function lamp(x, y, on, label) {
+  ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fillStyle = on ? '#ffd166' : '#4f5c70'; ctx.fill();
+  ctx.fillStyle = '#a7b4c8'; ctx.font = '10px Arial'; ctx.fillText(label, x + 16, y + 4);
+}
+function bit(v) { return `<span class="bit ${v ? 'on' : ''}"></span>`; }
+function drawBox(p) {
+  ctx.fillStyle = p.color || '#d9e6ff'; ctx.strokeStyle = '#172033'; ctx.lineWidth = 2;
+  ctx.fillRect(p.x - 22, p.y - 16, 44, 32); ctx.strokeRect(p.x - 22, p.y - 16, 44, 32);
+  ctx.fillStyle = '#172033'; ctx.font = 'bold 12px Arial'; ctx.fillText(`#${p.id}`, p.x - 11, p.y + 4);
+  if (p.completedStations.length) { ctx.font = '10px Arial'; ctx.fillText(p.completedStations.join(','), p.x - 8, p.y + 15); }
+}
+function drawConveyor(y, label) {
+  ctx.fillStyle = '#263247'; ctx.fillRect(70, y, 980, 34); ctx.strokeStyle = '#42536f'; ctx.strokeRect(70, y, 980, 34);
+  ctx.fillStyle = '#a7b4c8'; ctx.font = '12px Arial'; ctx.fillText(label, 70, y - 8);
+  for (let x = 90; x < 1040; x += 42) { ctx.beginPath(); ctx.arc(x, y + 17, 10, 0, Math.PI * 2); ctx.fillStyle = '#6e7d92'; ctx.fill(); ctx.strokeStyle = '#b6c3d8'; ctx.stroke(); }
+}
+function drawStation(s) {
+  const x = s.x;
+  ctx.fillStyle = '#25334b'; ctx.strokeStyle = '#5b6c8d'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.roundRect(x - 70, 88, 140, 108, 10); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#ecf2ff'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.fillText(s.name, x, 116);
+  ctx.font = '12px monospace'; ctx.fillStyle = '#a7b4c8'; ctx.fillText(s.state, x, 140); ctx.fillText(`${s.cycles} cycles`, x, 163);
+  ctx.strokeStyle = '#5b6c8d'; ctx.beginPath(); ctx.moveTo(x, 196); ctx.lineTo(x, 250); ctx.stroke();
+  lamp(x - 44, 250, s.peBlocked, `PE ${s.index + 1}`);
+  ctx.fillStyle = s.callForBox ? '#63a4ff' : '#4f5c70'; ctx.fillRect(x - 48, 64, 24, 14);
+  ctx.fillStyle = s.complete ? '#3bd179' : '#4f5c70'; ctx.fillRect(x - 12, 64, 24, 14);
+  ctx.fillStyle = s.outputs.pusher ? '#ffd166' : '#4f5c70'; ctx.fillRect(x + 24, 64, 24, 14);
+  if (s.outputs.pusher) { ctx.fillStyle = '#ffd166'; ctx.fillRect(x - 8, 195, 16, 88); }
+}
+function drawMachine() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = '#0b111d';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  ctx.fillStyle = '#2e384b';
-  ctx.fillRect(70, 180, 980, 54);
-  ctx.fillStyle = '#111722';
-  ctx.fillRect(85, 194, 950, 24);
-
-  for (let x = 90; x < 1040; x += 42) {
-    ctx.beginPath();
-    ctx.arc(x, 207, 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#56657c';
-    ctx.fill();
-    ctx.strokeStyle = '#8290a5';
-    ctx.stroke();
-  }
-
-  drawLabel(75, 155, 'INFEED PE', state.sensors.peInfeed);
-  drawLabel(1005, 155, 'OUTFEED PE', state.sensors.peOutfeed);
-
-  for (const station of state.stations) drawStation(station);
-  for (const product of state.products) drawProduct(product);
-
-  drawTowerLight(35, 35);
-  drawLegend();
+  drawConveyor(175, 'TOP INFEED / CVP CONVEYOR'); drawConveyor(295, 'BOTTOM TAKEAWAY CONVEYOR');
+  lamp(75, 154, state.inputs['I:1/0 Infeed PE'], 'INFEED PE'); lamp(1010, 274, state.inputs['I:1/4 Bottom Outfeed PE'], 'BOTTOM OUTFEED PE');
+  state.stations.forEach(drawStation); state.products.forEach(drawBox);
+  ctx.textAlign = 'left'; ctx.fillStyle = '#a7b4c8'; ctx.font = '12px Arial';
+  ctx.fillText('Blue=call for box   Green=complete   Yellow=pusher out / transfer to lower conveyor', 80, 390);
 }
-
-function drawStation(station) {
-  const x = station.x;
-  const y = 90;
-  const active = station.state !== 'IDLE' && station.state !== 'FAULT';
-  const fault = station.state === 'FAULT';
-
-  ctx.fillStyle = fault ? '#7d1720' : active ? '#214f8a' : '#243149';
-  ctx.strokeStyle = fault ? '#ff5e66' : active ? '#63a4ff' : '#46556d';
-  ctx.lineWidth = 3;
-  roundedRect(x - 70, y, 140, 110, 12, true, true);
-
-  ctx.fillStyle = '#ecf2ff';
-  ctx.font = 'bold 18px Arial';
-  ctx.textAlign = 'center';
-  ctx.fillText(station.name, x, y + 27);
-
-  ctx.font = '13px Consolas';
-  ctx.fillStyle = fault ? '#ffb3b7' : '#a7b4c8';
-  ctx.fillText(station.state, x, y + 53);
-  ctx.fillText(`Cycles: ${station.cycles}`, x, y + 76);
-  if (station.timer > 0) ctx.fillText(`${station.timer.toFixed(1)}s`, x, y + 96);
-
-  // Photoeye beam
-  ctx.strokeStyle = station.peBlocked ? '#3bd179' : '#4f5c70';
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(x, 165);
-  ctx.lineTo(x, 245);
-  ctx.stroke();
-
-  drawLabel(x - 45, 255, `PE ${station.index + 1}`, station.peBlocked);
+function renderIO() {
+  const groups = [['Inputs', state.inputs], ['Outputs', state.outputs], ['Stations', Object.fromEntries(state.stations.map(s => [s.name, `${s.state} | call=${s.callForBox} complete=${s.complete} pusher=${s.outputs.pusher}`]))]];
+  el.ioGrid.innerHTML = groups.map(([title, obj]) => `<div><h3>${title}</h3>${Object.entries(obj).map(([k, v]) => `<div class="tag"><span>${k}</span>${typeof v === 'boolean' ? bit(v) : `<span>${v}</span>`}</div>`).join('')}</div>`).join('');
 }
-
-function drawProduct(product) {
-  const y = 184;
-  ctx.fillStyle = product.heldBy !== null ? '#ffd166' : '#d8e4f8';
-  ctx.strokeStyle = '#111722';
-  ctx.lineWidth = 2;
-  roundedRect(product.x - product.width / 2, y, product.width, 46, 8, true, true);
-
-  ctx.fillStyle = '#111722';
-  ctx.font = 'bold 13px Consolas';
-  ctx.textAlign = 'center';
-  ctx.fillText(`#${product.id}`, product.x, y + 19);
-  ctx.font = '11px Consolas';
-  ctx.fillText(product.doneStations.map(i => i + 1).join('') || '-', product.x, y + 36);
-}
-
-function drawLabel(x, y, text, on) {
-  ctx.fillStyle = on ? '#3bd179' : '#4f5c70';
-  ctx.beginPath();
-  ctx.arc(x, y + 4, 6, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = '#a7b4c8';
-  ctx.font = '12px Consolas';
-  ctx.textAlign = 'left';
-  ctx.fillText(text, x + 12, y + 8);
-}
-
-function drawTowerLight(x, y) {
-  const lights = [
-    ['RED', state.outputs.towerRed, '#ff5e66'],
-    ['AMBER', state.outputs.towerAmber, '#ffd166'],
-    ['GREEN', state.outputs.towerGreen, '#3bd179']
+function renderRungs() {
+  const rows = [
+    ['Master Run Latch', state.masterRunLatch], ['Permissive: E-stop OK', state.estopOK], ['Permissive: Auto Mode', state.autoMode], ['No Faults', !state.faults.any],
+    ...state.stations.flatMap((s, i) => [[`CVP ${i + 1} call for box`, s.callForBox], [`CVP ${i + 1} cycle complete`, s.complete], [`CVP ${i + 1} pusher extend`, s.outputs.pusher]])
   ];
-  ctx.fillStyle = '#202c40';
-  roundedRect(x - 15, y - 10, 76, 118, 10, true, false);
-  lights.forEach(([label, on, color], index) => {
-    ctx.beginPath();
-    ctx.arc(x + 20, y + 18 + index * 34, 12, 0, Math.PI * 2);
-    ctx.fillStyle = on ? color : '#3b4659';
-    ctx.fill();
-    ctx.strokeStyle = '#0b111d';
-    ctx.stroke();
-    ctx.fillStyle = '#a7b4c8';
-    ctx.font = '10px Consolas';
-    ctx.textAlign = 'left';
-    ctx.fillText(label, x + 38, y + 22 + index * 34);
-  });
+  el.rungs.innerHTML = rows.map(([name, v]) => `<div class="rung"><span>${name}</span>${bit(v)}</div>`).join('');
 }
-
-function drawLegend() {
-  ctx.fillStyle = '#a7b4c8';
-  ctx.font = '12px Arial';
-  ctx.textAlign = 'left';
-  ctx.fillText('Product box shows completed station numbers. Yellow = held in station cycle.', 75, 325);
-}
-
-function roundedRect(x, y, w, h, r, fill, stroke) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-  if (fill) ctx.fill();
-  if (stroke) ctx.stroke();
-}
-
-function bitRow(tag, value, options = {}) {
-  const cls = value ? options.fault ? 'bit fault' : options.warn ? 'bit warn' : 'bit on' : 'bit';
-  return `<div class="io-row"><span class="io-tag">${tag}</span><span class="${cls}"></span></div>`;
-}
-
-function renderList() {
-  el.inputList.innerHTML = [
-    bitRow('I:0/0 Start PB', state.startPB),
-    bitRow('I:0/1 Stop PB', state.stopPB),
-    bitRow('I:0/2 Reset PB', state.resetPB),
-    bitRow('I:0/3 E-Stop OK', state.estopOK),
-    bitRow('I:0/4 Auto Mode', state.autoMode),
-    bitRow('I:1/0 PE Infeed', state.sensors.peInfeed),
-    bitRow('I:1/1 PE CVP1', state.sensors.peCVP1),
-    bitRow('I:1/2 PE CVP2', state.sensors.peCVP2),
-    bitRow('I:1/3 PE CVP3', state.sensors.peCVP3),
-    bitRow('I:1/4 PE Outfeed', state.sensors.peOutfeed)
-  ].join('');
-
-  el.outputList.innerHTML = Object.entries(state.outputs)
-    .map(([key, value]) => bitRow(`O:${key}`, value, { fault: key === 'towerRed' || key === 'horn' }))
-    .join('');
-
-  el.stationList.innerHTML = state.stations.map(station => {
-    const value = station.state !== 'IDLE';
-    return `<div class="io-row"><span class="io-tag">${station.name}</span><span>${station.state} | ${station.cycles} cycles</span><span class="${value ? station.fault ? 'bit fault' : 'bit on' : 'bit'}"></span></div>`;
-  }).join('');
-
-  el.logicList.innerHTML = state.logic.map(row => {
-    const cls = row.value ? row.fault ? 'bit fault' : row.warn ? 'bit warn' : 'bit on' : 'bit';
-    return `<div class="logic-row"><span class="logic-tag">${row.tag}</span><span class="${cls}"></span></div>`;
-  }).join('');
-
-  el.alarmList.innerHTML = state.alarmHistory.map(text => {
-    const cls = text.startsWith('FAULT') ? 'alarm-row fault' : 'alarm-row info';
-    return `<div class="${cls}">${text}</div>`;
-  }).join('');
-}
-
+function renderAlarms() { el.alarms.innerHTML = state.alarms.length ? state.alarms.map(a => `<div>${a.time}s — ${a.text}</div>`).join('') : '<div>No active alarm history</div>'; }
 function renderStatus() {
-  const fault = !state.estopOK || state.stations.some(s => s.fault);
-  const running = state.outputs.conveyorMotor;
-  const status = fault ? 'FAULTED' : running ? 'RUNNING' : 'STOPPED';
-  el.systemStatus.textContent = status;
-  el.systemStatus.className = `status-pill ${status.toLowerCase()}`;
-  el.autoBtn.textContent = `AUTO MODE: ${state.autoMode ? 'ON' : 'OFF'}`;
-  el.estopBtn.textContent = state.estopOK ? 'E-STOP OK' : 'E-STOP TRIPPED';
-  el.estopBtn.classList.toggle('tripped', !state.estopOK);
-  el.scanTime.textContent = `PLC Scan: ${state.scanMs} ms | Products: ${state.products.length}`;
+  el.statusPill.textContent = state.faults.any ? 'FAULTED' : state.masterRunLatch ? 'RUNNING' : 'STOPPED';
+  el.statusPill.className = `pill ${state.faults.any ? 'faulted' : state.masterRunLatch ? 'running' : 'stopped'}`;
+  el.scanInfo.textContent = `PLC Scan: ${state.scanMs} ms | Products: ${state.products.length}`;
 }
+function tick() { syncFaults(); plcScan(state); drawMachine(); renderIO(); renderRungs(); renderAlarms(); renderStatus(); }
 
-function tick() {
-  plcScan(state);
-  drawConveyor();
-  renderList();
-  renderStatus();
-}
-
-spawnProduct(state);
-spawnProduct(state);
-setInterval(tick, state.scanMs);
-requestAnimationFrame(drawConveyor);
+spawnProduct(state); spawnProduct(state); setInterval(tick, state.scanMs); tick();
