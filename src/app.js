@@ -126,37 +126,37 @@ function drawStation(s) {
   ctx.fillStyle = '#25334b';
   ctx.strokeStyle = '#5b6c8d';
   ctx.lineWidth = 3;
-  roundedRect(x - 70, 70, 140, 108, 10);
+  roundedRect(x - 58, 72, 116, 94, 9);
   ctx.fill();
   ctx.stroke();
 
   ctx.textAlign = 'center';
   ctx.fillStyle = '#ecf2ff';
-  ctx.font = 'bold 18px Arial';
+  ctx.font = 'bold 15px Arial';
   ctx.fillText(s.name, x, 98);
-  ctx.font = '12px monospace';
+  ctx.font = '10px monospace';
   ctx.fillStyle = '#a7b4c8';
-  ctx.fillText(s.state, x, 122);
-  ctx.fillText(`${s.cycles} cycles`, x, 145);
+  ctx.fillText(s.state, x, 120);
+  ctx.fillText(`${s.cycles} cycles`, x, 141);
 
   ctx.strokeStyle = '#5b6c8d';
   ctx.beginPath();
-  ctx.moveTo(x, 178);
+  ctx.moveTo(x, 166);
   ctx.lineTo(x, 246);
   ctx.stroke();
 
   lamp(x - 44, 246, s.peBlocked, `PE ${s.index + 1}`);
 
   ctx.fillStyle = s.callForBox ? '#63a4ff' : '#4f5c70';
-  ctx.fillRect(x - 48, 46, 24, 14);
+  ctx.fillRect(x - 42, 46, 22, 14);
   ctx.fillStyle = s.complete ? '#3bd179' : '#4f5c70';
-  ctx.fillRect(x - 12, 46, 24, 14);
+  ctx.fillRect(x - 11, 46, 22, 14);
   ctx.fillStyle = s.outputs.pusher ? '#ffd166' : '#4f5c70';
-  ctx.fillRect(x + 24, 46, 24, 14);
+  ctx.fillRect(x + 20, 46, 22, 14);
 
   if (s.outputs.pusher) {
     ctx.fillStyle = '#ffd166';
-    ctx.fillRect(x - 8, 178, 16, 92);
+    ctx.fillRect(x - 8, 166, 16, 104);
   }
 }
 
