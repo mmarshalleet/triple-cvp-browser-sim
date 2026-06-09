@@ -1,5 +1,11 @@
 export const STATION_NAMES = ['CVP 1', 'CVP 2', 'CVP 3'];
 
+const TOP_Y = 184;
+const BOTTOM_Y = 304;
+const TOP_SPEED = 82;
+const BOTTOM_SPEED = 115;
+const MAX_PRODUCTS = 22;
+
 export function createStation(index, x) {
   return {
     index,
@@ -14,312 +20,240 @@ export function createStation(index, x) {
     faultText: '',
     jamTimer: 0,
     peBlocked: false,
-    lastState: 'IDLE'
+    callForBox: false,
+    complete: false,
+    pusherExtended: false,
+    outputs: { clamp: false, vacuum: false, release: false, pusher: false }
   };
 }
 
 export function createInitialState() {
   return {
     scanMs: 50,
-    simTime: 0,
+    time: 0,
+    nextProductId: 1,
+    masterRunLatch: false,
     autoMode: true,
+    estopOK: true,
     startPB: false,
     stopPB: false,
     resetPB: false,
-    estopOK: true,
-    masterRunLatch: false,
-    conveyorRun: false,
-    alarmHistory: ['INFO: Simulator loaded'],
     products: [],
-    nextProductId: 1,
-    forcedFaults: {
-      jamStation1: false,
-      jamStation2: false,
-      jamStation3: false,
-      vacFail1: false,
-      vacFail2: false,
-      vacFail3: false
-    },
-    stations: [
-      createStation(0, 310),
-      createStation(1, 570),
-      createStation(2, 830)
-    ],
-    sensors: {
-      peInfeed: false,
-      peCVP1: false,
-      peCVP2: false,
-      peCVP3: false,
-      peOutfeed: false
-    },
-    outputs: {
-      conveyorMotor: false,
-      towerGreen: false,
-      towerAmber: false,
-      towerRed: false,
-      horn: false,
-      cvp1Clamp: false,
-      cvp1Vacuum: false,
-      cvp1Release: false,
-      cvp2Clamp: false,
-      cvp2Vacuum: false,
-      cvp2Release: false,
-      cvp3Clamp: false,
-      cvp3Vacuum: false,
-      cvp3Release: false
-    },
-    logic: []
+    alarms: [],
+    faults: { any: false },
+    faultInject: { jam: [false, false, false], vacuumFail: [false, false, false] },
+    inputs: {},
+    outputs: {},
+    stations: [createStation(0, 300), createStation(1, 560), createStation(2, 820)]
   };
 }
 
 export function spawnProduct(state) {
-  if (state.products.length > 18) return;
-  state.products.push({
+  if (state.products.length >= MAX_PRODUCTS) return null;
+  const p = {
     id: state.nextProductId++,
-    x: 35,
-    width: 44,
+    x: 50,
+    y: TOP_Y,
+    lane: 'top',
+    assignedStation: null,
     heldBy: null,
-    doneStations: [],
-    colorSeed: Math.random()
-  });
+    completedStations: [],
+    color: '#d9e6ff'
+  };
+  state.products.push(p);
+  return p;
 }
 
-function addAlarm(state, text, type = 'FAULT') {
-  const line = `${type}: ${text}`;
-  if (state.alarmHistory[0] !== line) {
-    state.alarmHistory.unshift(line);
-    state.alarmHistory = state.alarmHistory.slice(0, 12);
+function alarm(state, text) {
+  if (!state.alarms.length || state.alarms[0].text !== text) {
+    state.alarms.unshift({ time: (state.time / 1000).toFixed(1), text });
+    state.alarms = state.alarms.slice(0, 12);
   }
 }
 
-function clearStationFaults(state) {
-  for (const station of state.stations) {
-    station.fault = false;
-    station.faultText = '';
-    station.jamTimer = 0;
-    if (station.state === 'FAULT') {
-      station.state = 'IDLE';
-      station.productId = null;
-      station.timer = 0;
-      station.cycleTime = 0;
-    }
-  }
+function clearStation(station) {
+  station.state = 'IDLE';
+  station.timer = 0;
+  station.productId = null;
+  station.complete = false;
+  station.pusherExtended = false;
+  station.outputs = { clamp: false, vacuum: false, release: false, pusher: false };
 }
 
-function productAtSensor(product, x) {
-  return Math.abs(product.x - x) < 32;
-}
-
-function calculateSensors(state) {
-  state.sensors.peInfeed = state.products.some(p => productAtSensor(p, 110));
-  state.sensors.peCVP1 = state.products.some(p => productAtSensor(p, state.stations[0].x));
-  state.sensors.peCVP2 = state.products.some(p => productAtSensor(p, state.stations[1].x));
-  state.sensors.peCVP3 = state.products.some(p => productAtSensor(p, state.stations[2].x));
-  state.sensors.peOutfeed = state.products.some(p => productAtSensor(p, 1030));
-
-  if (state.forcedFaults.jamStation1) state.sensors.peCVP1 = true;
-  if (state.forcedFaults.jamStation2) state.sensors.peCVP2 = true;
-  if (state.forcedFaults.jamStation3) state.sensors.peCVP3 = true;
-
-  for (const station of state.stations) {
-    station.peBlocked = state.sensors[`peCVP${station.index + 1}`];
-  }
-}
-
-function hasAnyFault(state) {
-  return !state.estopOK || state.stations.some(s => s.fault);
-}
-
-function setStationOutputs(state) {
-  for (const station of state.stations) {
-    const prefix = `cvp${station.index + 1}`;
-    state.outputs[`${prefix}Clamp`] = station.state === 'CLAMPING' || station.state === 'VACUUM';
-    state.outputs[`${prefix}Vacuum`] = station.state === 'VACUUM';
-    state.outputs[`${prefix}Release`] = station.state === 'RELEASING';
-  }
+function nearestWaitingProduct(state, station) {
+  return state.products.find(p => p.lane === 'top' && !p.heldBy && !p.assignedStation && p.x < station.x - 18);
 }
 
 function stationProduct(state, station) {
   return state.products.find(p => p.id === station.productId);
 }
 
-function findProductReadyForStation(state, station) {
-  return state.products.find(product => {
-    if (product.heldBy !== null) return false;
-    if (product.doneStations.includes(station.index)) return false;
-    return Math.abs(product.x - station.x) < 26;
-  });
+function assignCalls(state) {
+  for (const s of state.stations) {
+    s.callForBox = state.masterRunLatch && !s.fault && s.state === 'IDLE';
+    if (!s.callForBox) continue;
+    const p = nearestWaitingProduct(state, s);
+    if (p) p.assignedStation = s.index;
+  }
 }
 
-function scanStation(state, station, dt) {
-  const vacuumFail = state.forcedFaults[`vacFail${station.index + 1}`];
-
-  if (station.peBlocked && station.state === 'IDLE' && state.conveyorRun) {
-    station.jamTimer += dt;
-  } else if (station.state !== 'IDLE') {
-    station.jamTimer = 0;
-  } else {
-    station.jamTimer = Math.max(0, station.jamTimer - dt * 2);
+function scanStation(state, s, dt) {
+  const pe = s.peBlocked || state.faultInject.jam[s.index];
+  if (state.faultInject.jam[s.index] && state.masterRunLatch) s.jamTimer += dt;
+  else s.jamTimer = 0;
+  if (s.jamTimer > 2500) {
+    s.fault = true;
+    s.faultText = `${s.name} photoeye jam`; 
+    alarm(state, s.faultText);
   }
 
-  if (station.jamTimer > 8) {
-    station.fault = true;
-    station.faultText = `${station.name} photoeye blocked / jam timeout`;
-    station.state = 'FAULT';
-    addAlarm(state, station.faultText);
-    return;
-  }
+  s.outputs.clamp = false;
+  s.outputs.vacuum = false;
+  s.outputs.release = false;
+  s.outputs.pusher = false;
 
-  switch (station.state) {
-    case 'IDLE': {
-      const product = findProductReadyForStation(state, station);
-      if (state.autoMode && state.masterRunLatch && product) {
-        product.heldBy = station.index;
-        product.x = station.x;
-        station.productId = product.id;
-        station.state = 'CLAMPING';
-        station.timer = 0.55;
-        station.cycleTime = 0;
-      }
-      break;
-    }
-    case 'CLAMPING': {
-      station.timer -= dt;
-      station.cycleTime += dt;
-      const product = stationProduct(state, station);
-      if (product) product.x = station.x;
-      if (station.timer <= 0) {
-        station.state = 'VACUUM';
-        station.timer = 2.1;
-      }
-      break;
-    }
-    case 'VACUUM': {
-      station.timer -= dt;
-      station.cycleTime += dt;
-      const product = stationProduct(state, station);
-      if (product) product.x = station.x;
-      if (vacuumFail && station.cycleTime > 1.4) {
-        station.fault = true;
-        station.faultText = `${station.name} vacuum not made`;
-        station.state = 'FAULT';
-        addAlarm(state, station.faultText);
-        return;
-      }
-      if (station.timer <= 0) {
-        station.state = 'RELEASING';
-        station.timer = 0.45;
-      }
-      break;
-    }
-    case 'RELEASING': {
-      station.timer -= dt;
-      station.cycleTime += dt;
-      const product = stationProduct(state, station);
-      if (product) product.x = station.x;
-      if (station.timer <= 0) {
-        if (product) {
-          product.doneStations.push(station.index);
-          product.heldBy = null;
-          product.x += 8;
+  if (!state.masterRunLatch || s.fault) return;
+
+  const p = stationProduct(state, s);
+  s.timer += dt;
+
+  switch (s.state) {
+    case 'IDLE':
+      s.complete = false;
+      s.pusherExtended = false;
+      if (pe) {
+        const box = state.products.find(pr => pr.lane === 'top' && pr.assignedStation === s.index && Math.abs(pr.x - s.x) < 28);
+        if (box) {
+          s.productId = box.id;
+          box.heldBy = s.index;
+          box.x = s.x;
+          s.state = 'CLAMPING';
+          s.timer = 0;
         }
-        station.cycles += 1;
-        station.productId = null;
-        station.state = 'IDLE';
-        station.timer = 0;
-        station.cycleTime = 0;
       }
       break;
-    }
-    case 'FAULT': {
-      const product = stationProduct(state, station);
-      if (product) product.x = station.x;
+    case 'CLAMPING':
+      s.outputs.clamp = true;
+      if (s.timer > 600) { s.state = 'VACUUM'; s.timer = 0; }
       break;
-    }
+    case 'VACUUM':
+      s.outputs.clamp = true;
+      s.outputs.vacuum = true;
+      if (state.faultInject.vacuumFail[s.index] && s.timer > 1400) {
+        s.fault = true;
+        s.faultText = `${s.name} vacuum not made`;
+        alarm(state, s.faultText);
+      } else if (s.timer > 1800) {
+        s.state = 'COMPLETE';
+        s.complete = true;
+        s.cycleTime = state.time;
+        s.timer = 0;
+      }
+      break;
+    case 'COMPLETE':
+      s.outputs.clamp = true;
+      s.outputs.vacuum = true;
+      if (s.timer > 500) { s.state = 'PUSHER_OUT'; s.timer = 0; }
+      break;
+    case 'PUSHER_OUT':
+      s.outputs.pusher = true;
+      s.pusherExtended = true;
+      if (p) { p.x = s.x; p.y = TOP_Y + Math.min(120, s.timer * 0.13); }
+      if (s.timer > 950) {
+        if (p) {
+          p.lane = 'bottom';
+          p.y = BOTTOM_Y;
+          p.heldBy = null;
+          p.assignedStation = null;
+          p.completedStations.push(s.index + 1);
+          p.color = '#ffd166';
+        }
+        s.cycles++;
+        s.state = 'RELEASING';
+        s.timer = 0;
+      }
+      break;
+    case 'RELEASING':
+      s.outputs.release = true;
+      if (s.timer > 650) clearStation(s);
+      break;
   }
 }
 
 function moveProducts(state, dt) {
-  if (!state.conveyorRun) return;
-
-  const speed = 82;
-  state.products.sort((a, b) => a.x - b.x);
-
-  for (let i = 0; i < state.products.length; i++) {
-    const product = state.products[i];
-    if (product.heldBy !== null) continue;
-
-    const next = state.products[i + 1];
-    const proposed = product.x + speed * dt;
-    const minGap = 55;
-
-    if (next && next.x - proposed < minGap) {
-      product.x = next.x - minGap;
+  const sec = dt / 1000;
+  for (const p of state.products) {
+    if (p.heldBy !== null) continue;
+    if (!state.masterRunLatch) continue;
+    if (p.lane === 'top') {
+      const target = typeof p.assignedStation === 'number' ? state.stations[p.assignedStation].x : null;
+      if (target && p.x >= target - 4) { p.x = target; continue; }
+      p.x += TOP_SPEED * sec;
     } else {
-      product.x = proposed;
+      p.x += BOTTOM_SPEED * sec;
     }
   }
-
-  state.products = state.products.filter(p => p.x < 1160);
+  state.products = state.products.filter(p => p.x < 1110);
+  if (state.masterRunLatch && state.products.filter(p => p.lane === 'top').length < 2) spawnProduct(state);
 }
 
-function updateOutputs(state) {
-  const fault = hasAnyFault(state);
-  state.outputs.conveyorMotor = state.masterRunLatch && state.autoMode && !fault;
-  state.outputs.towerGreen = state.outputs.conveyorMotor;
-  state.outputs.towerAmber = state.masterRunLatch && !state.outputs.conveyorMotor && !fault;
-  state.outputs.towerRed = fault;
-  state.outputs.horn = fault;
-  setStationOutputs(state);
-}
-
-function updateLogicMonitor(state) {
-  const fault = hasAnyFault(state);
-  state.logic = [
-    { tag: 'Rung 000: EStop OK + Auto + Start seals MasterRunLatch', value: state.estopOK && state.autoMode && state.masterRunLatch },
-    { tag: 'Rung 001: Stop PB or Fault unlatches MasterRunLatch', value: state.stopPB || fault, warn: fault },
-    { tag: 'Rung 002: ConveyorMotor = MasterRunLatch AND Auto AND NoFault', value: state.outputs.conveyorMotor },
-    { tag: 'Rung 003: CVP1 Sequence Active', value: state.stations[0].state !== 'IDLE' && state.stations[0].state !== 'FAULT' },
-    { tag: 'Rung 004: CVP2 Sequence Active', value: state.stations[1].state !== 'IDLE' && state.stations[1].state !== 'FAULT' },
-    { tag: 'Rung 005: CVP3 Sequence Active', value: state.stations[2].state !== 'IDLE' && state.stations[2].state !== 'FAULT' },
-    { tag: 'Rung 006: Tower Red / Horn = Any Fault', value: fault, fault },
-    { tag: 'Rung 007: Reset clears station faults when safe', value: state.resetPB && state.estopOK }
-  ];
+function calcIO(state) {
+  const near = (x, lane = 'top') => state.products.some(p => p.lane === lane && Math.abs(p.x - x) < 18);
+  state.inputs = {
+    'I:0/0 Start PB': state.startPB,
+    'I:0/1 Stop PB': state.stopPB,
+    'I:0/2 Reset PB': state.resetPB,
+    'I:0/3 E-stop OK': state.estopOK,
+    'I:0/4 Auto Mode': state.autoMode,
+    'I:1/0 Infeed PE': near(75),
+    'I:1/1 CVP 1 PE': near(300) || state.faultInject.jam[0],
+    'I:1/2 CVP 2 PE': near(560) || state.faultInject.jam[1],
+    'I:1/3 CVP 3 PE': near(820) || state.faultInject.jam[2],
+    'I:1/4 Bottom Outfeed PE': near(1010, 'bottom')
+  };
+  state.stations.forEach((s, i) => s.peBlocked = state.inputs[`I:1/${i + 1} CVP ${i + 1} PE`]);
+  state.outputs = {
+    'O:Conveyor Motor': state.masterRunLatch,
+    'O:Bottom Conveyor Motor': state.masterRunLatch,
+    'O:Tower Green': state.masterRunLatch && !state.faults.any,
+    'O:Tower Amber': !state.masterRunLatch && !state.faults.any,
+    'O:Tower Red': state.faults.any
+  };
+  state.stations.forEach((s, i) => {
+    const n = i + 1;
+    state.outputs[`O:CVP${n} Call For Box`] = s.callForBox;
+    state.outputs[`O:CVP${n} Complete`] = s.complete;
+    state.outputs[`O:CVP${n} Clamp`] = s.outputs.clamp;
+    state.outputs[`O:CVP${n} Vacuum`] = s.outputs.vacuum;
+    state.outputs[`O:CVP${n} Pusher`] = s.outputs.pusher;
+    state.outputs[`O:CVP${n} Release`] = s.outputs.release;
+  });
 }
 
 export function plcScan(state) {
-  const dt = state.scanMs / 1000;
-  state.simTime += dt;
+  const dt = state.scanMs;
+  state.time += dt;
 
-  calculateSensors(state);
-
-  const preFault = hasAnyFault(state);
-
-  if (state.resetPB && state.estopOK) {
-    clearStationFaults(state);
-    addAlarm(state, 'Fault reset requested', 'INFO');
+  if (state.resetPB) {
+    for (const s of state.stations) {
+      s.fault = false;
+      s.faultText = '';
+      s.jamTimer = 0;
+      clearStation(s);
+    }
+    state.alarms = [];
   }
 
-  if (state.startPB && state.autoMode && state.estopOK && !preFault) {
-    state.masterRunLatch = true;
-  }
+  state.faults.any = state.stations.some(s => s.fault) || !state.estopOK;
+  if (state.startPB && state.estopOK && state.autoMode && !state.faults.any) state.masterRunLatch = true;
+  if (state.stopPB || !state.estopOK || state.faults.any) state.masterRunLatch = false;
 
-  if (state.stopPB || !state.estopOK || hasAnyFault(state)) {
-    state.masterRunLatch = false;
-  }
-
-  updateOutputs(state);
-  state.conveyorRun = state.outputs.conveyorMotor;
-
-  for (const station of state.stations) scanStation(state, station, dt);
-
-  if (hasAnyFault(state)) state.masterRunLatch = false;
-  updateOutputs(state);
-  state.conveyorRun = state.outputs.conveyorMotor;
-
+  assignCalls(state);
+  calcIO(state);
+  for (const s of state.stations) scanStation(state, s, dt);
   moveProducts(state, dt);
-  calculateSensors(state);
-  updateLogicMonitor(state);
+  assignCalls(state);
+  calcIO(state);
 
   state.startPB = false;
   state.stopPB = false;
