@@ -1,0 +1,24 @@
+{
+  "name": "triple-cvp-browser-sim",
+  "version": "1.0.0",
+  "description": "Browser-based triple CVP conveyor controls simulation with PLC-style scan logic, HMI, faults, and station sequencing.",
+  "private": true,
+  "scripts": {
+    "start": "npx serve .",
+    "test": "node tests/sim.test.mjs"
+  },
+  "keywords": [
+    "automation",
+    "plc",
+    "conveyor",
+    "simulation",
+    "hmi",
+    "controls"
+  ],
+  "author": "Future Automation LLC",
+  "license": "MIT",
+  "devDependencies": {
+    "serve": "latest"
+  },
+  "type": "module"
+}

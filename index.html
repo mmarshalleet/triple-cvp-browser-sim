@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Triple CVP Conveyor Controls Simulator</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Triple CVP Conveyor Controls Simulator</h1>
+        <p>Browser-based PLC/HMI example with real scan logic, product flow, station cycles, and faults.</p>
+      </div>
+      <div class="status-pill" id="systemStatus">STOPPED</div>
+    </header>
+
+    <main class="layout">
+      <section class="panel hmi-panel">
+        <div class="panel-title-row">
+          <h2>HMI</h2>
+          <span id="scanTime">PLC Scan: 50 ms</span>
+        </div>
+
+        <div class="button-grid">
+          <button class="btn green" id="startBtn">START</button>
+          <button class="btn red" id="stopBtn">STOP</button>
+          <button class="btn yellow" id="resetBtn">RESET</button>
+          <button class="btn" id="spawnBtn">ADD PRODUCT</button>
+          <button class="btn" id="autoBtn">AUTO MODE: ON</button>
+          <button class="btn danger" id="estopBtn">E-STOP OK</button>
+        </div>
+
+        <div class="fault-panel">
+          <h3>Fault Injection</h3>
+          <label><input type="checkbox" id="jamStation1" /> Jam Station 1 PE</label>
+          <label><input type="checkbox" id="jamStation2" /> Jam Station 2 PE</label>
+          <label><input type="checkbox" id="jamStation3" /> Jam Station 3 PE</label>
+          <label><input type="checkbox" id="vacFail1" /> Vacuum Fail Station 1</label>
+          <label><input type="checkbox" id="vacFail2" /> Vacuum Fail Station 2</label>
+          <label><input type="checkbox" id="vacFail3" /> Vacuum Fail Station 3</label>
+        </div>
+      </section>
+
+      <section class="panel sim-panel">
+        <div class="panel-title-row">
+          <h2>Machine Simulation</h2>
+          <span>Infeed → CVP 1 → CVP 2 → CVP 3 → Outfeed</span>
+        </div>
+        <canvas id="machineCanvas" width="1100" height="360"></canvas>
+      </section>
+
+      <section class="panel io-panel">
+        <h2>Live I/O</h2>
+        <div class="io-columns">
+          <div>
+            <h3>Inputs</h3>
+            <div id="inputList" class="io-list"></div>
+          </div>
+          <div>
+            <h3>Outputs</h3>
+            <div id="outputList" class="io-list"></div>
+          </div>
+          <div>
+            <h3>Stations</h3>
+            <div id="stationList" class="io-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel logic-panel">
+        <h2>PLC-Style Logic Monitor</h2>
+        <div id="logicList" class="logic-list"></div>
+      </section>
+
+      <section class="panel alarm-panel">
+        <h2>Alarm History</h2>
+        <div id="alarmList" class="alarm-list"></div>
+      </section>
+    </main>
+
+    <script type="module" src="src/app.js"></script>
+  </body>
+</html>
