@@ -21,6 +21,8 @@ export function createStation(index, x) {
     jamTimer: 0,
     peBlocked: false,
     callForBox: false,
+    callSince: null,
+    reservedProductId: null,
     complete: false,
     pusherExtended: false,
     outputs: { clamp: false, vacuum: false, release: false, pusher: false }
@@ -77,23 +79,60 @@ function clearStation(station) {
   station.productId = null;
   station.complete = false;
   station.pusherExtended = false;
+  station.reservedProductId = null;
   station.outputs = { clamp: false, vacuum: false, release: false, pusher: false };
-}
-
-function nearestWaitingProduct(state, station) {
-  return state.products.find(p => p.lane === 'top' && !p.heldBy && !p.assignedStation && p.x < station.x - 18);
 }
 
 function stationProduct(state, station) {
   return state.products.find(p => p.id === station.productId);
 }
 
-function assignCalls(state) {
+function updateStationCalls(state) {
   for (const s of state.stations) {
-    s.callForBox = state.masterRunLatch && !s.fault && s.state === 'IDLE';
-    if (!s.callForBox) continue;
-    const p = nearestWaitingProduct(state, s);
-    if (p) p.assignedStation = s.index;
+    const wasCalling = s.callForBox;
+    const canCall = state.masterRunLatch && !s.fault && s.state === 'IDLE';
+    s.callForBox = canCall;
+
+    if (s.callForBox && !wasCalling) s.callSince = state.time;
+    if (!s.callForBox) {
+      s.callSince = null;
+      s.reservedProductId = null;
+    }
+
+    if (s.reservedProductId !== null) {
+      const reservedBox = state.products.find(p => p.id === s.reservedProductId);
+      const reservationStillValid = reservedBox && reservedBox.lane === 'top' && reservedBox.assignedStation === s.index;
+      if (!reservationStillValid) s.reservedProductId = null;
+    }
+  }
+}
+
+function selectStationForProduct(state, product) {
+  return state.stations
+    .filter(s =>
+      s.callForBox &&
+      s.callSince !== null &&
+      s.reservedProductId === null &&
+      product.x < s.x - 18
+    )
+    .sort((a, b) => {
+      if (a.callSince !== b.callSince) return a.callSince - b.callSince;
+      return a.index - b.index;
+    })[0] || null;
+}
+
+function assignCalls(state) {
+  updateStationCalls(state);
+
+  const availableProducts = state.products
+    .filter(p => p.lane === 'top' && !p.heldBy && p.assignedStation === null)
+    .sort((a, b) => b.x - a.x);
+
+  for (const p of availableProducts) {
+    const station = selectStationForProduct(state, p);
+    if (!station) continue;
+    p.assignedStation = station.index;
+    station.reservedProductId = p.id;
   }
 }
 
@@ -125,6 +164,7 @@ function scanStation(state, s, dt) {
         const box = state.products.find(pr => pr.lane === 'top' && pr.assignedStation === s.index && Math.abs(pr.x - s.x) < 28);
         if (box) {
           s.productId = box.id;
+          s.reservedProductId = null;
           box.heldBy = s.index;
           box.x = s.x;
           s.state = 'CLAMPING';
@@ -240,6 +280,8 @@ export function plcScan(state) {
       s.faultText = '';
       s.jamTimer = 0;
       clearStation(s);
+      s.callForBox = false;
+      s.callSince = null;
     }
     state.alarms = [];
   }
