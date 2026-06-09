@@ -1,6 +1,6 @@
-# Triple CVP Conveyor Controls Simulator
+# Triple CVP Conveyor Controls Program
 
-A browser-based example repo for a **Triple CVP conveyor controls system** with a working simulation, HMI-style controls, PLC-style scan logic, live I/O, station sequencing, and fault injection.
+A browser-based repo for a Triple CVP conveyor controls system with a working simulation, HMI-style controls, PLC-style scan logic, live I/O, station sequencing, and fault injection.
 
 This is intentionally written in plain HTML/CSS/JavaScript so it can run on GitHub Pages without a backend, build step, or PLC software license.
 
