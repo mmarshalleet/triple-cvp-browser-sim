@@ -64,7 +64,7 @@ function roundedRect(x, y, w, h, r) {
   ctx.closePath();
 }
 
-function lamp(x, y, on, label) {
+function lamp(x, y, on, label, labelX = x + 16, labelY = y + 4) {
   ctx.beginPath();
   ctx.arc(x, y, 11, 0, Math.PI * 2);
   ctx.fillStyle = on ? '#ffd166' : '#4f5c70';
@@ -74,7 +74,7 @@ function lamp(x, y, on, label) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#a7b4c8';
   ctx.font = '10px Arial';
-  ctx.fillText(label, x + 16, y + 4);
+  ctx.fillText(label, labelX, labelY);
 }
 
 function bit(v) {
@@ -102,7 +102,7 @@ function drawBox(p) {
   }
 }
 
-function drawConveyor(y, label) {
+function drawConveyor(y, label, labelX = 70) {
   ctx.fillStyle = '#263247';
   ctx.fillRect(70, y, 980, 34);
   ctx.strokeStyle = '#42536f';
@@ -110,7 +110,7 @@ function drawConveyor(y, label) {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#a7b4c8';
   ctx.font = '12px Arial';
-  ctx.fillText(label, 70, y - 8);
+  ctx.fillText(label, labelX, y - 8);
   for (let x = 90; x < 1040; x += 42) {
     ctx.beginPath();
     ctx.arc(x, y + 17, 10, 0, Math.PI * 2);
@@ -162,9 +162,9 @@ function drawStation(s) {
 
 function drawMachine() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  drawConveyor(160, 'TOP INFEED / CVP CONVEYOR');
+  drawConveyor(160, 'TOP INFEED', 92);
   drawConveyor(270, 'BOTTOM TAKEAWAY CONVEYOR');
-  lamp(75, 140, state.inputs['I:1/0 Infeed PE'], 'INFEED PE');
+  lamp(75, 140, state.inputs['I:1/0 Infeed PE'], 'INFEED PE', 92, 132);
   lamp(1010, 250, state.inputs['I:1/4 Bottom Outfeed PE'], 'BOTTOM OUTFEED PE');
   state.stations.forEach(drawStation);
   state.products.forEach(drawBox);
